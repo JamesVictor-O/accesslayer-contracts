@@ -110,7 +110,7 @@ impl CreatorKeysContract {
         profile.supply += 1;
         env.storage().persistent().set(&key, &profile);
         env.events()
-            .publish((symbol_short!("buy"), creator, buyer), profile.supply);
+            .publish((symbol_short!("buy"), creator, buyer), (profile.supply, payment));
 
         profile.supply
     }
