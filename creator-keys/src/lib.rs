@@ -8,11 +8,35 @@ pub mod fee {
     /// Basis points per 100% (10000 = 100%).
     pub const BPS_MAX: u32 = 10_000;
 
+    /// Maximum protocol share when configuring fees via [`assert_valid_fee_bps`].
+    ///
+    /// Caps the on-chain configured protocol take at 50% so fee settings stay within
+    /// expected economic bounds before they affect market logic.
+    pub const PROTOCOL_BPS_MAX: u32 = 5_000;
+
     #[derive(Clone)]
     #[contracttype]
     pub struct FeeConfig {
         pub creator_bps: u32,
         pub protocol_bps: u32,
+    }
+
+    /// Validates creator and protocol basis points for storage and fee-setting entrypoints.
+    ///
+    /// Requires `creator_bps + protocol_bps == BPS_MAX` and `protocol_bps <= PROTOCOL_BPS_MAX`.
+    pub fn assert_valid_fee_bps(creator_bps: u32, protocol_bps: u32) {
+        let Some(sum) = creator_bps.checked_add(protocol_bps) else {
+            panic!("creator_bps + protocol_bps overflow");
+        };
+        if sum != BPS_MAX {
+            panic!("creator_bps + protocol_bps must equal 10000");
+        }
+        if protocol_bps > PROTOCOL_BPS_MAX {
+            panic!(
+                "protocol_bps exceeds maximum allowed ({} bps)",
+                PROTOCOL_BPS_MAX
+            );
+        }
     }
 
     /// Computes the fee split for a given total amount.
@@ -34,6 +58,7 @@ pub mod fee {
 pub enum DataKey {
     Creator(Address),
     FeeConfig,
+    KeyPrice,
 }
 
 #[derive(Clone)]
@@ -63,8 +88,17 @@ impl CreatorKeysContract {
         env.events().publish((symbol_short!("register"),), key);
     }
 
-    pub fn buy_key(env: Env, creator: Address, buyer: Address) -> u32 {
+    pub fn buy_key(env: Env, creator: Address, buyer: Address, payment: i128) -> u32 {
         buyer.require_auth();
+
+        let price: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::KeyPrice)
+            .unwrap_or_else(|| panic!("key price not set"));
+        if payment < price {
+            panic!("insufficient payment");
+        }
 
         let key = DataKey::Creator(creator.clone());
         let mut profile: CreatorProfile = env
@@ -88,14 +122,20 @@ impl CreatorKeysContract {
 
     pub fn set_fee_config(env: Env, admin: Address, creator_bps: u32, protocol_bps: u32) {
         admin.require_auth();
-        if creator_bps + protocol_bps != fee::BPS_MAX {
-            panic!("creator_bps + protocol_bps must equal 10000");
-        }
+        fee::assert_valid_fee_bps(creator_bps, protocol_bps);
         let config = fee::FeeConfig {
             creator_bps,
             protocol_bps,
         };
         env.storage().persistent().set(&DataKey::FeeConfig, &config);
+    }
+
+    pub fn set_key_price(env: Env, admin: Address, price: i128) {
+        admin.require_auth();
+        if price <= 0 {
+            panic!("key price must be positive");
+        }
+        env.storage().persistent().set(&DataKey::KeyPrice, &price);
     }
 
     pub fn get_fee_config(env: Env) -> Option<fee::FeeConfig> {
