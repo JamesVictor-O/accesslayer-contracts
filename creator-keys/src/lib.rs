@@ -71,6 +71,8 @@ pub enum DataKey {
     Creator(Address),
     FeeConfig,
     KeyPrice,
+    KeyBalance(Address, Address),
+
     TreasuryAddress,
 }
 
@@ -156,10 +158,22 @@ impl CreatorKeysContract {
 
         profile.supply += 1;
         env.storage().persistent().set(&key, &profile);
+
+        let balance_key = DataKey::KeyBalance(creator.clone(), buyer.clone());
+        let current_balance: u32 = env.storage().persistent().get(&balance_key).unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&balance_key, &(current_balance + 1));
+
         env.events()
             .publish((symbol_short!("buy"), creator, buyer), profile.supply);
 
         profile.supply
+    }
+
+    pub fn get_key_balance(env: Env, creator: Address, wallet: Address) -> u32 {
+        let key = DataKey::KeyBalance(creator, wallet);
+        env.storage().persistent().get(&key).unwrap_or(0)
     }
 
     pub fn get_creator(env: Env, creator: Address) -> Option<CreatorProfile> {
