@@ -171,10 +171,6 @@ impl CreatorKeysContract {
             .checked_add(1)
             .ok_or(ContractError::Overflow)?;
         env.storage().persistent().set(&key, &profile);
-        env.events().publish(
-            (symbol_short!("buy"), creator, buyer),
-            (profile.supply, payment),
-        );
 
         let balance_key = DataKey::KeyBalance(creator.clone(), buyer.clone());
         let current_balance: u32 = env.storage().persistent().get(&balance_key).unwrap_or(0);
@@ -183,8 +179,10 @@ impl CreatorKeysContract {
             .ok_or(ContractError::Overflow)?;
         env.storage().persistent().set(&balance_key, &new_balance);
 
-        env.events()
-            .publish((symbol_short!("buy"), creator, buyer), profile.supply);
+        env.events().publish(
+            (symbol_short!("buy"), creator, buyer),
+            (profile.supply, payment),
+        );
 
         Ok(profile.supply)
     }
