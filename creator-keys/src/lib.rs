@@ -108,6 +108,16 @@ pub fn read_key_balance(env: &Env, creator: &Address) -> u32 {
 #[contract]
 pub struct CreatorKeysContract;
 
+impl CreatorKeysContract {
+    fn require_creator(env: &Env, creator: &Address) -> CreatorProfile {
+        let key = DataKey::Creator(creator.clone());
+        env.storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic!("creator not registered"))
+    }
+}
+
 #[contractimpl]
 impl CreatorKeysContract {
     pub fn register_creator(env: Env, creator: Address, handle: String) {
@@ -142,11 +152,7 @@ impl CreatorKeysContract {
         }
 
         let key = DataKey::Creator(creator.clone());
-        let mut profile: CreatorProfile = env
-            .storage()
-            .persistent()
-            .get(&key)
-            .unwrap_or_else(|| panic!("creator not registered"));
+        let mut profile = Self::require_creator(&env, &creator);
 
         profile.supply += 1;
         env.storage().persistent().set(&key, &profile);
